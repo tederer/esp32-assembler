@@ -1,0 +1,46 @@
+ld r0, r0, 0          00 00 00 d0
+ld r0, r0, 0x001      00 00 00 d0
+ld r0, r0, 0x002      00 00 00 d0
+ld r0, r0, 0x004      00 04 00 d0
+ld r0, r0, 0x008      00 08 00 d0
+ld r0, r0, 0x010      00 10 00 d0
+ld r0, r0, 0x020      00 20 00 d0
+ld r0, r0, 0x040      00 40 00 d0
+ld r0, r0, 0x080      00 80 00 d0
+ld r0, r0, 0x100      00 00 01 d0
+ld r0, r0, 0x200      00 00 02 d0
+ld r0, r0, 0x400      00 00 04 d0
+
+
+r0, r0, 0        st: 00 00 00 68     ld: 00 00 00 d0
+r0, r0, 0x7ff    st: 00 fc 07 68     ld: 00 fc 07 d0
+r0, r1, 0        st: 04 00 00 68     ld: 04 00 00 d0
+r0, r1, 0x7ff    st: 04 fc 07 68     ld: 04 fc 07 d0
+r0, r2, 0        st: 08 00 00 68     ld: 08 00 00 d0
+r0, r2, 0x7ff    st: 08 fc 07 68     ld: 08 fc 07 d0              1111 1100 0000 0111
+r0, r3, 0        st: 0c 00 00 68     ld: 0c 00 00 d0
+r0, r3, 0x7ff    st: 0c fc 07 68     ld: 0c fc 07 d0
+r1, r0, 0        st: 01 00 00 68     ld: 01 00 00 d0
+r1, r0, 0x7ff    st: 01 fc 07 68     ld: 01 fc 07 d0
+r1, r1, 0        st: 05 00 00 68     ld: 05 00 00 d0
+r1, r1, 0x7ff    st: 05 fc 07 68     ld: 05 fc 07 d0
+r1, r2, 0        st: 09 00 00 68     ld: 09 00 00 d0
+r1, r2, 0x7ff    st: 09 fc 07 68     ld: 09 fc 07 d0
+r1, r3, 0        st: 0d 00 00 68     ld: 0d 00 00 d0
+r1, r3, 0x7ff    st: 0d fc 07 68     ld: 0d fc 07 d0
+r2, r0, 0        st: 02 00 00 68     ld: 02 00 00 d0
+r2, r0, 0x7ff    st: 02 fc 07 68     ld: 02 fc 07 d0
+r2, r1, 0        st: 06 00 00 68     ld: 06 00 00 d0
+r2, r1, 0x7ff    st: 06 fc 07 68     ld: 06 fc 07 d0
+r2, r2, 0        st: 0a 00 00 68     ld: 0a 00 00 d0
+r2, r2, 0x7ff    st: 0a fc 07 68     ld: 0a fc 07 d0
+r2, r3, 0        st: 0e 00 00 68     ld: 0e 00 00 d0
+r2, r3, 0x7ff    st: 0e fc 07 68     ld: 0e fc 07 d0
+r3, r0, 0        st: 03 00 00 68     ld: 03 00 00 d0
+r3, r0, 0x7ff    st: 03 fc 07 68     ld: 03 fc 07 d0
+r3, r1, 0        st: 07 00 00 68     ld: 07 00 00 d0
+r3, r1, 0x7ff    st: 07 fc 07 68     ld: 07 fc 07 d0
+r3, r2, 0        st: 0b 00 00 68     ld: 0b 00 00 d0
+r3, r2, 0x7ff    st: 0b fc 07 68     ld: 0b fc 07 d0
+r3, r3, 0        st: 0f 00 00 68     ld: 0f 00 00 d0
+r3, r3, 0x7ff    st: 0f fc 07 68     ld: 0f fc 07 d0

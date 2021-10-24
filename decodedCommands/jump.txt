@@ -1,0 +1,23 @@
+jump r0            00 00 20 80
+jump r1            01 00 20 80
+jump r2            02 00 20 80
+jump r3            03 00 20 80
+
+jump 0             00 00 00 80
+jump 0x3fc         fc 03 00 80   
+
+jump r0, eq        00 00 60 80    
+jump r1, eq        01 00 60 80    
+jump r2, eq        02 00 60 80    
+jump r3, eq        03 00 60 80    
+
+jump r0, ov        00 00 a0 80    
+jump r1, ov        01 00 a0 80    
+jump r2, ov        02 00 a0 80    
+jump r3, ov        03 00 a0 80    
+
+jump 0, eq         00 00 40 80   
+jump 0x3fc, eq     fc 03 40 80       
+
+jump 0, ov         00 00 80 80   
+jump 0x3fc, ov     fc 03 80 80       
