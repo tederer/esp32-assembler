@@ -10,11 +10,11 @@ returnValue:
    .global entry
 entry:
 
-nop                                                 
-reg_wr     0, 15,  0, 0
-reg_wr 0x3ff, 31,  0, 0x0f
-reg_wr 0x3ff,  0, 31, 0xf0
-nop                                                 
+// same code as in line 19 - 23 but using relative jumps instead of absolute ones
+reg_rd 0x30, 0x13, 0x13
+jumpr -4, 0, lt        
+jumpr -8, 1, ge        
+wake                                                                 
 
 isReadyForWakeup:									   // Read RTC_CNTL_RDY_FOR_WAKEUP bit
 	READ_RTC_FIELD(RTC_CNTL_LOW_POWER_ST_REG, RTC_CNTL_RDY_FOR_WAKEUP)

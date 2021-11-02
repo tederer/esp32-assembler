@@ -131,11 +131,11 @@ Command commands[] = {
    {"jump (0x[0-9a-f]+|[0-9]+)",                                                                                       jumpImmediate},
    {"jump (0x[0-9a-f]+|[0-9]+) ((eq)|(ov))",                                                                           jumpImmediateConditional},
                                                   
-   {"jumpr (0x[0-9a-f]+|[0-9]+) (0x[0-9a-f]+|[0-9]+) ((lt)|(ge))",                                                     jumpConditionalUponR0ToRelativeAddress},
-   {"jumpr (0x[0-9a-f]+|[0-9]+) (0x[0-9a-f]+|[0-9]+) ((eq)|(le)|(gt))",                                                unsupportedJumpRelativeConditionalBasedOnR0},
+   {"jumpr [-]?(0x[0-9a-f]+|[0-9]+) (0x[0-9a-f]+|[0-9]+) ((lt)|(ge))",                                                 jumpConditionalUponR0ToRelativeAddress},
+   {"jumpr [-]?(0x[0-9a-f]+|[0-9]+) (0x[0-9a-f]+|[0-9]+) ((eq)|(le)|(gt))",                                            unsupportedJumpRelativeConditionalBasedOnR0},
                                                
-   {"jumps (0x[0-9a-f]+|[0-9]+) (0x[0-9a-f]+|[0-9]+) ((lt)|(le)|(ge))",                                                jumpConditionalUponStageCountToRelativeAddress},
-   {"jumps (0x[0-9a-f]+|[0-9]+) (0x[0-9a-f]+|[0-9]+) ((eq)|(gt))",                                                     unsupportedJumpRelativeConditionalBasedOnStageCount},
+   {"jumps [-]?(0x[0-9a-f]+|[0-9]+) (0x[0-9a-f]+|[0-9]+) ((lt)|(le)|(ge))",                                                jumpConditionalUponStageCountToRelativeAddress},
+   {"jumps [-]?(0x[0-9a-f]+|[0-9]+) (0x[0-9a-f]+|[0-9]+) ((eq)|(gt))",                                                     unsupportedJumpRelativeConditionalBasedOnStageCount},
                                                   
    {"halt",                                                                                                            halt},
    {"wake",                                                                                                            wake},

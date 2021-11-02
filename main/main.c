@@ -32,6 +32,7 @@ static void initSerialInterface();
 static void handleCommands();
 static void processNextLine(uint8_t *line);
 
+// ULP program binary according to https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-guides/ulp.html?highlight=ulp%20magic#_CPPv415ulp_load_binary8uint32_tPK7uint8_t6size_t
 struct UlpBinary {
    uint32_t magic;
    uint16_t textOffset;

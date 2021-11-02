@@ -672,6 +672,9 @@ Testcase testcases[] = {
    {"jumpr   13, 0x7fed, ge", true, {0xed, 0x7f, 0x07, 0x82}},
    {"jumpr 0x3a, 0x7fed, ge", true, {0xed, 0x7f, 0x1d, 0x82}},
 
+   {"jumpr   -4,      0, lt", true, {0x00, 0x00, 0xfe, 0x83}},
+   {"jumpr   -8,      1, ge", true, {0x01, 0x00, 0xfd, 0x83}},
+   
    // The conditions eq, le and gt are not supported by the ULP. The compiler replaces them by modified jumpr commands using ge and lt.
    {"jumpr    0,      0, eq", false, {0x00, 0x00, 0x00, 0x00}},
    {"jumpr    0,      0, le", false, {0x00, 0x00, 0x00, 0x00}},
@@ -709,6 +712,9 @@ Testcase testcases[] = {
    {"jumps   13,    0, ge",    true, {0x00, 0x80, 0x06, 0x84}},
    {"jumps   13, 0x96, ge",    true, {0x96, 0x80, 0x06, 0x84}},
    {"jumps 0x3a, 0xff, ge",    true, {0xff, 0x80, 0x1c, 0x84}},
+
+   {"jumps   -4,    0, lt",    true, {0x00, 0x00, 0xfe, 0x85}},
+   {"jumps   -8,    1, ge",    true, {0x01, 0x80, 0xfc, 0x85}},
 
    // The conditions eq and gt are not supported by the ULP. The compiler replaces them by modified jumps commands using lt, le and ge.
    {"jumps    0,    0, eq",   false, {0x00, 0x00, 0x00, 0x00}},
