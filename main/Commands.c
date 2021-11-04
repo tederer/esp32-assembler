@@ -134,8 +134,8 @@ Command commands[] = {
    {"jumpr [-]?(0x[0-9a-f]+|[0-9]+) (0x[0-9a-f]+|[0-9]+) ((lt)|(ge))",                                                 jumpConditionalUponR0ToRelativeAddress},
    {"jumpr [-]?(0x[0-9a-f]+|[0-9]+) (0x[0-9a-f]+|[0-9]+) ((eq)|(le)|(gt))",                                            unsupportedJumpRelativeConditionalBasedOnR0},
                                                
-   {"jumps [-]?(0x[0-9a-f]+|[0-9]+) (0x[0-9a-f]+|[0-9]+) ((lt)|(le)|(ge))",                                                jumpConditionalUponStageCountToRelativeAddress},
-   {"jumps [-]?(0x[0-9a-f]+|[0-9]+) (0x[0-9a-f]+|[0-9]+) ((eq)|(gt))",                                                     unsupportedJumpRelativeConditionalBasedOnStageCount},
+   {"jumps [-]?(0x[0-9a-f]+|[0-9]+) (0x[0-9a-f]+|[0-9]+) ((lt)|(le)|(ge))",                                            jumpConditionalUponStageCountToRelativeAddress},
+   {"jumps [-]?(0x[0-9a-f]+|[0-9]+) (0x[0-9a-f]+|[0-9]+) ((eq)|(gt))",                                                 unsupportedJumpRelativeConditionalBasedOnStageCount},
                                                   
    {"halt",                                                                                                            halt},
    {"wake",                                                                                                            wake},
@@ -551,12 +551,14 @@ static Result jumpToAbsoluteAddress(uint8_t *commandAsText, bool isImmediate, bo
 // byte3      byte2      byte1      byte0
 // ------------------------------------------
 // 1098 7654  3210 9876  5432 1098  7654 3210   position
-// oooo 001s  ssss sssc  tttt tttt  tttt tttt   content: o = opCode, s = relative step in 32-bit words, c = condition, t = threshold
+// oooo 001k  ssss sssc  tttt tttt  tttt tttt   content: o = opCode, k = sign (0 -> PC + steps, 1 -> PC - steps), s = relative step in 32-bit words, c = condition, t = threshold
 static Result jumpConditionalUponR0ToRelativeAddress(uint8_t *commandAsText) {
    int opCode                       = 8;
    int bit25to27                    = 1;
    strtok((char*)commandAsText, " ");
    int stepInBytes                  = strtol(strtok( NULL, " "), NULL, 0);
+   bool incrementProgramCounter     = (stepInBytes & 0x80) == 0;
+   stepInBytes                      = (stepInBytes * (incrementProgramCounter ? 1 : -1)) & 0x7f;
    int stepInWords                  = stepInBytes / 4;
    int threshold                    = strtol(strtok( NULL, " "), NULL, 0);
    char *conditionAsText            = strtok( NULL, " ");
@@ -564,8 +566,8 @@ static Result jumpConditionalUponR0ToRelativeAddress(uint8_t *commandAsText) {
 
    uint8_t byte0                    = threshold & 0xff;
    uint8_t byte1                    = (threshold & 0xff00) >> 8;
-   uint8_t byte2                    = condition | ((stepInWords & 0x7f) << 1);
-   uint8_t byte3                    = (opCode << 4) | (bit25to27 << 1) | ((stepInWords & 0x80) >> 7);
+   uint8_t byte2                    = (stepInWords << 1) | condition;
+   uint8_t byte3                    = (opCode << 4) | (bit25to27 << 1) | (incrementProgramCounter ? 0 : 1);
 
    CommandBytes commandBytes = {byte0, byte1, byte2, byte3};
    return (Result){commandBytes, DESCRIPTION_JUMPR, NULL};
@@ -574,20 +576,22 @@ static Result jumpConditionalUponR0ToRelativeAddress(uint8_t *commandAsText) {
 // byte3      byte2      byte1      byte0
 // ------------------------------------------
 // 1098 7654  3210 9876  5432 1098  7654 3210   position
-// oooo 010s  ssss sssc  c000 0000  tttt tttt   content: o = opCode, s = relative step in 32-bit words, c = condition, t = threshold
+// oooo 010k  ssss sssc  c000 0000  tttt tttt   content: o = opCode, k = sign (0 -> PC + steps, 1 -> PC - steps), s = relative step in 32-bit words, c = condition, t = threshold
 static Result jumpConditionalUponStageCountToRelativeAddress(uint8_t *commandAsText) {
    int opCode                       = 8;
    int bit25to27                    = 2;
    strtok((char*)commandAsText, " ");
    int stepInBytes                  = strtol(strtok( NULL, " "), NULL, 0);
+   bool incrementProgramCounter     = (stepInBytes & 0x80) == 0;
+   stepInBytes                      = (stepInBytes * (incrementProgramCounter ? 1 : -1)) & 0x7f;
    int stepInWords                  = stepInBytes / 4;
    int threshold                    = strtol(strtok( NULL, " "), NULL, 0);
    int condition                    = relativeStageCountCondition(strtok( NULL, " "));
 
    uint8_t byte0                    = threshold & 0xff;
    uint8_t byte1                    = (condition & 0x1) << 7;
-   uint8_t byte2                    = ((condition & 0x2) >> 1) | ((stepInWords & 0x7f) << 1);
-   uint8_t byte3                    = (opCode << 4) | (bit25to27 << 1) | ((stepInWords & 0x80) >> 7);
+   uint8_t byte2                    = (stepInWords << 1) | ((condition & 0x2) >> 1);
+   uint8_t byte3                    = (opCode << 4) | (bit25to27 << 1) | (incrementProgramCounter ? 0 : 1);
 
    CommandBytes commandBytes = {byte0, byte1, byte2, byte3};
    return (Result){commandBytes, DESCRIPTION_JUMPS, NULL};

@@ -50,14 +50,14 @@ void app_main()
 {   
    esp_sleep_wakeup_cause_t cause = esp_sleep_get_wakeup_cause();
    if (cause == ESP_SLEEP_WAKEUP_ULP) {
-      ESP_LOGI(TAG, "returnValue = 0x%04X", ulp_returnValue);
+      ESP_LOGI(TAG, "return value = 0x%04X", ulp_returnValue & 0xffff);
    } else {
       ESP_LOGI(TAG, "first startup -> initializing ULP");
       initUlp();
-      //loadUlpProgram();
-      loadGeneratedUlpProgramFromRam();
+      loadUlpProgram();
+      //loadGeneratedUlpProgramFromRam();
 
-      struct UlpBinary *ulpBinary = (struct UlpBinary*)ulp_main_bin_start;
+      /*struct UlpBinary *ulpBinary = (struct UlpBinary*)ulp_main_bin_start;
       ESP_LOGI(TAG, "size in bytes = %d", ulp_main_bin_end - ulp_main_bin_start);
       ESP_LOGI(TAG, "magic         = %d", ulpBinary->magic);
       ESP_LOGI(TAG, "textOffset    = %d", ulpBinary->textOffset);
@@ -70,19 +70,20 @@ void app_main()
 
       const uint8_t *codeStart = ulp_main_bin_start + ulpBinary->textOffset;
 
+      ESP_LOGI(TAG, "             byte3  byte2  byte1  byte0");
       for (size_t offset = 0; offset < ulpBinary->textSize; offset = offset + 4) {
-         sprintf(command, "%2d: %02x %02x %02x %02x", offset / 4, *(codeStart + offset), *(codeStart + offset + 1), *(codeStart + offset + 2), *(codeStart + offset + 3));
-         ESP_LOGI(TAG, "command %s", command);
-      }
+         sprintf(command, "command %2d:     %02x     %02x     %02x     %02x", offset / 4, *(codeStart + offset + 3), *(codeStart + offset + 2), *(codeStart + offset + 1), *(codeStart + offset));
+         ESP_LOGI(TAG, "%s", command);
+      }*/
 
-      /*startUlpProgram();
+      startUlpProgram();
    
       ESP_LOGI(TAG, "disabling all wakeup sources");
       ESP_ERROR_CHECK( esp_sleep_disable_wakeup_source(ESP_SLEEP_WAKEUP_ALL) );
       ESP_LOGI(TAG, "enabling ULP wakeup");
       ESP_ERROR_CHECK( esp_sleep_enable_ulp_wakeup() );
       ESP_LOGI(TAG, "Entering deep sleep");
-      esp_deep_sleep_start();  */ 
+      esp_deep_sleep_start();
    } 
    
    //xTaskCreate(handleCommands, "handle commands from serial interface", 4000, NULL, 10, NULL);
@@ -95,7 +96,22 @@ static void initUlp()
 
 static void loadUlpProgram()
 {
-   esp_err_t err = ulp_load_binary(0, ulp_main_bin_start, (ulp_main_bin_end - ulp_main_bin_start) / sizeof(uint32_t));
+   ESP_LOGI(TAG, "fixing jumpr bug in ULP program");
+   CommandBytes commandBytes;
+   getCommandBytesFor((uint8_t*)"jumpr -8, 1, lt", &commandBytes);
+   uint8_t correctedJumpr[4] = {commandBytes.byte0, commandBytes.byte1, commandBytes.byte2, commandBytes.byte3};
+   size_t programSize = ulp_main_bin_end - ulp_main_bin_start;
+   size_t jumprStartPosition = (programSize - 1) - (2 * 4) + 1;
+   uint8_t fixedProgram[programSize];
+   for (size_t i = 0; i < programSize; i++) {
+      size_t correctedJumprIndex = i - jumprStartPosition;
+      uint8_t value = (correctedJumprIndex >= 0 && correctedJumprIndex < 4) ? correctedJumpr[correctedJumprIndex] : *(ulp_main_bin_start + i);
+      *(fixedProgram + i) = value;
+   }
+
+   ESP_LOGI(TAG, "loading ULP program to RTC memory");
+   esp_err_t err = ulp_load_binary(0, fixedProgram, programSize / sizeof(uint32_t));
+   //esp_err_t err = ulp_load_binary(0, ulp_main_bin_start, (ulp_main_bin_end - ulp_main_bin_start) / sizeof(uint32_t));
    ESP_ERROR_CHECK(err);
 }
 
@@ -156,7 +172,7 @@ static void startUlpProgram()
    ulp_set_wakeup_period(0, MILLIS(1000));
 
    /* Start the ULP program */
-   ESP_ERROR_CHECK(ulp_run(1));
+   ESP_ERROR_CHECK(ulp_run(&ulp_entry - RTC_SLOW_MEM));
 }
 
 static void initSerialInterface() {
