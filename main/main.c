@@ -12,6 +12,7 @@
 #include "esp32/ulp.h"
 #include "ulp_main.h"
 
+#include "StringUtils.h"
 #include "Commands.h"
 
 #define SERIAL_PORT  UART_NUM_0
@@ -19,18 +20,30 @@
 #define LF           0x0d
 #define CR           0x0a
 
+#define ULP_PROGRAM_MAX_COMMAND_COUNT           50
+#define ULP_PROGRAM_SHARED_VARIABLES_COUNT      1
+#define ULP_PROGRAM_HEADER_SIZE_IN_BYTES        12
+#define ULP_PROGRAM_COMMAND_SIZE_IN_BYTES       4
+#define ULP_PROGRAM_WAKE_COMMANDS_COUNT         4
+
 static const char* TAG = "main";
+
+static uint8_t ulpProgram[ULP_PROGRAM_HEADER_SIZE_IN_BYTES + (ULP_PROGRAM_MAX_COMMAND_COUNT + ULP_PROGRAM_WAKE_COMMANDS_COUNT) * ULP_PROGRAM_COMMAND_SIZE_IN_BYTES];
+static char *WAKE_COMMANDS[ULP_PROGRAM_WAKE_COMMANDS_COUNT] = { "reg_rd 0x30, 0x13, 0x13", "and r0, r0, 1", "jumpr -8, 1, lt", "wake"};
 
 extern const uint8_t ulp_main_bin_start[] asm("_binary_ulp_main_bin_start");
 extern const uint8_t ulp_main_bin_end[]   asm("_binary_ulp_main_bin_end");
 
-static void initUlp();
-static void loadUlpProgram();
-static void loadGeneratedUlpProgramFromRam();
-static void startUlpProgram();
-static void initSerialInterface();
-static void handleCommands();
-static void processNextLine(uint8_t *line);
+static void       initUlp();
+static void       loadUlpProgram(const uint8_t *program);
+static void       loadCorrectedUlpProgram();
+static void       startUlpProgram();
+static void       initSerialInterface();
+static void       handleCommands();
+static void       processNextLine(uint8_t *line);
+static void       printUlpProgram(const uint8_t *programStart);
+static void       initializeUlpProgram();
+static void       setBytesInUlpProgram(size_t commandIndex, CommandBytes *commandBytes);
 
 // ULP program binary according to https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-guides/ulp.html?highlight=ulp%20magic#_CPPv415ulp_load_binary8uint32_tPK7uint8_t6size_t
 struct UlpBinary {
@@ -54,28 +67,10 @@ void app_main()
    } else {
       ESP_LOGI(TAG, "first startup -> initializing ULP");
       initUlp();
-      loadUlpProgram();
-      //loadGeneratedUlpProgramFromRam();
-
-      /*struct UlpBinary *ulpBinary = (struct UlpBinary*)ulp_main_bin_start;
-      ESP_LOGI(TAG, "size in bytes = %d", ulp_main_bin_end - ulp_main_bin_start);
-      ESP_LOGI(TAG, "magic         = %d", ulpBinary->magic);
-      ESP_LOGI(TAG, "textOffset    = %d", ulpBinary->textOffset);
-      ESP_LOGI(TAG, "textSize      = %d", ulpBinary->textSize);
-      ESP_LOGI(TAG, "dataSize      = %d", ulpBinary->dataSize);
-      ESP_LOGI(TAG, "bssSize       = %d", ulpBinary->bssSize);
-      ESP_LOGI(TAG, "entryPoint    = %d", &ulp_entry - RTC_SLOW_MEM);
-
-      char command[50];
-
-      const uint8_t *codeStart = ulp_main_bin_start + ulpBinary->textOffset;
-
-      ESP_LOGI(TAG, "             byte3  byte2  byte1  byte0");
-      for (size_t offset = 0; offset < ulpBinary->textSize; offset = offset + 4) {
-         sprintf(command, "command %2d:     %02x     %02x     %02x     %02x", offset / 4, *(codeStart + offset + 3), *(codeStart + offset + 2), *(codeStart + offset + 1), *(codeStart + offset));
-         ESP_LOGI(TAG, "%s", command);
-      }*/
-
+      printUlpProgram(ulp_main_bin_start);
+      initializeUlpProgram();
+      printUlpProgram(ulpProgram);
+      /*loadUlpProgram(ulpProgram);
       startUlpProgram();
    
       ESP_LOGI(TAG, "disabling all wakeup sources");
@@ -83,10 +78,10 @@ void app_main()
       ESP_LOGI(TAG, "enabling ULP wakeup");
       ESP_ERROR_CHECK( esp_sleep_enable_ulp_wakeup() );
       ESP_LOGI(TAG, "Entering deep sleep");
-      esp_deep_sleep_start();
+      esp_deep_sleep_start();*/
    } 
    
-   //xTaskCreate(handleCommands, "handle commands from serial interface", 4000, NULL, 10, NULL);
+   xTaskCreate(handleCommands, "handle commands from serial interface", 4000, NULL, 10, NULL);
 }
 
 static void initUlp()
@@ -94,7 +89,46 @@ static void initUlp()
    esp_deep_sleep_disable_rom_logging(); // suppress boot messages
 }
 
-static void loadUlpProgram()
+static void initializeUlpProgram() {
+   ESP_LOGI(TAG, "initializing ULP program");
+   struct UlpBinary* metaData = (struct UlpBinary*)ulpProgram;
+   metaData->magic       = 0x00706c75;
+   metaData->textOffset  = 12;
+   metaData->textSize    = (ULP_PROGRAM_SHARED_VARIABLES_COUNT + ULP_PROGRAM_MAX_COMMAND_COUNT + ULP_PROGRAM_WAKE_COMMANDS_COUNT) * ULP_PROGRAM_COMMAND_SIZE_IN_BYTES;
+   metaData->dataSize    = 0;
+   metaData->bssSize     = 0;
+
+   // set all shared variables to 0
+   CommandBytes zeroValue = {0x00, 0x00, 0x00, 0x00};
+   size_t offset = ULP_PROGRAM_HEADER_SIZE_IN_BYTES / ULP_PROGRAM_COMMAND_SIZE_IN_BYTES;
+
+   for(size_t sharedVariableIndex = 0; sharedVariableIndex < ULP_PROGRAM_SHARED_VARIABLES_COUNT; sharedVariableIndex++) {
+      setBytesInUlpProgram(offset + sharedVariableIndex, &zeroValue);
+   }
+
+   // set all commands to nop
+   CommandBytes noopCommand;
+   getCommandBytesFor((uint8_t*)"nop", &noopCommand);
+   offset += ULP_PROGRAM_SHARED_VARIABLES_COUNT;
+
+   for(size_t commandIndex = 0; commandIndex < ULP_PROGRAM_MAX_COMMAND_COUNT; commandIndex++) {
+      setBytesInUlpProgram(offset + commandIndex, &noopCommand);
+   }
+
+   // append wake code sequence
+   offset += ULP_PROGRAM_MAX_COMMAND_COUNT;
+   CommandBytes wakeCommands[ULP_PROGRAM_WAKE_COMMANDS_COUNT];
+   getCommandBytesFor((uint8_t*)WAKE_COMMANDS[0], &wakeCommands[0]);
+   getCommandBytesFor((uint8_t*)WAKE_COMMANDS[1], &wakeCommands[1]);
+   getCommandBytesFor((uint8_t*)WAKE_COMMANDS[2], &wakeCommands[2]);
+   getCommandBytesFor((uint8_t*)WAKE_COMMANDS[3], &wakeCommands[3]);
+
+   for(size_t commandIndex = 0; commandIndex < ULP_PROGRAM_WAKE_COMMANDS_COUNT; commandIndex++) {
+      setBytesInUlpProgram(offset + commandIndex, &wakeCommands[commandIndex]);
+   }
+}
+
+static void loadCorrectedUlpProgram()
 {
    ESP_LOGI(TAG, "fixing jumpr bug in ULP program");
    CommandBytes commandBytes;
@@ -104,64 +138,19 @@ static void loadUlpProgram()
    size_t jumprStartPosition = (programSize - 1) - (2 * 4) + 1;
    uint8_t fixedProgram[programSize];
    for (size_t i = 0; i < programSize; i++) {
-      size_t correctedJumprIndex = i - jumprStartPosition;
+      int correctedJumprIndex = i - jumprStartPosition;
       uint8_t value = (correctedJumprIndex >= 0 && correctedJumprIndex < 4) ? correctedJumpr[correctedJumprIndex] : *(ulp_main_bin_start + i);
       *(fixedProgram + i) = value;
    }
 
-   ESP_LOGI(TAG, "loading ULP program to RTC memory");
-   esp_err_t err = ulp_load_binary(0, fixedProgram, programSize / sizeof(uint32_t));
-   //esp_err_t err = ulp_load_binary(0, ulp_main_bin_start, (ulp_main_bin_end - ulp_main_bin_start) / sizeof(uint32_t));
-   ESP_ERROR_CHECK(err);
+   loadUlpProgram(fixedProgram);
 }
 
-static void loadGeneratedUlpProgramFromRam()
-{
-   uint8_t programBinary[50];
-   struct UlpBinary* metaData = (struct UlpBinary*)programBinary;
-   metaData->magic            = 7367797;
-   metaData->textOffset       = 12;
-   metaData->textSize         = 20;
-   metaData->dataSize         = 0;
-   metaData->bssSize          = 0;
-   uint8_t* codeStart         = programBinary + metaData->textOffset;
-   size_t programSizeInBytes  = metaData->textOffset + metaData->textSize;
-   size_t index               = 0;
-
-   *(codeStart + index++) = 0x12;
-   *(codeStart + index++) = 0x34;
-   *(codeStart + index++) = 0x56;
-   *(codeStart + index++) = 0x78;
-
-   *(codeStart + index++) = 0x30;
-   *(codeStart + index++) = 0x00;
-   *(codeStart + index++) = 0xcc;
-   *(codeStart + index++) = 0x29;
- 
-   *(codeStart + index++) = 0x10;
-   *(codeStart + index++) = 0x00;
-   *(codeStart + index++) = 0x40;
-   *(codeStart + index++) = 0x72;
- 
-   *(codeStart + index++) = 0x04;
-   *(codeStart + index++) = 0x00;
-   *(codeStart + index++) = 0x40;
-   *(codeStart + index++) = 0x80;
- 
-   *(codeStart + index++) = 0x01;
-   *(codeStart + index++) = 0x00;
-   *(codeStart + index++) = 0x00;
-   *(codeStart + index++) = 0x90;
-
-   ESP_LOGI(TAG, "sizw = %d", programSizeInBytes);
-   char command[50];
-   for (size_t offset = 0; offset < programSizeInBytes; offset = offset + 4) {
-      sprintf(command, "%2d: %02x %02x %02x %02x", offset / 4, *(programBinary + offset), *(programBinary + offset + 1), *(programBinary + offset + 2), *(programBinary + offset + 3));
-      ESP_LOGI(TAG, "command im RAM %s", command);
-   }
-
-   esp_err_t err = ulp_load_binary(0, programBinary, programSizeInBytes / sizeof(uint32_t));
-   ESP_ERROR_CHECK(err);
+static void loadUlpProgram(const uint8_t *program) {
+   ESP_LOGI(TAG, "loading ULP program into ULP memory ...");
+   struct UlpBinary* metaData = (struct UlpBinary*)program;
+   uint32_t programSizeInBytes = ULP_PROGRAM_HEADER_SIZE_IN_BYTES + metaData->textSize + metaData->dataSize + metaData->bssSize;
+   ESP_ERROR_CHECK(ulp_load_binary(0, program, programSizeInBytes / sizeof(uint32_t)));
 }
 
 static void startUlpProgram()
@@ -196,7 +185,7 @@ static void handleCommands(void * pvParameters) {
    
    size_t readBytes;
    uint8_t buffer[2];
-   size_t maxLineLength = 20;
+   size_t maxLineLength = 40;
    uint8_t line[maxLineLength + 1];
    size_t insertationPosition = 0;
 
@@ -221,12 +210,49 @@ static void handleCommands(void * pvParameters) {
 }
 
 static void processNextLine(uint8_t *line) {
+   size_t lineLength = strlen((const char*)line);
+   uint8_t trimmedLineInLowerCase[lineLength];
+   strcpy((char*)trimmedLineInLowerCase, (char*)line);
+   toLowerCase(trim(trimmedLineInLowerCase));
+   if (strcmp((const char*)trimmedLineInLowerCase, "run") == 0) {
+      printf("run ULP program requested\n");
+      // TODO start ULP program
+   } else {
+      // TODO handle command count
+      CommandBytes commandBytes;
+      bool isValidCommand = getCommandBytesFor(line, &commandBytes);
 
-   CommandBytes commandBytes;
-   getCommandBytesFor(line, &commandBytes);
-   bool isValidCommand = true; 
+      if (!isValidCommand) {
+         printf("ERROR: unsupported command \"%s\"\n", line);
+      } else {
+         printf("command bytes: 0x%02x, 0x%02x, 0x%02x, 0x%02x\n", commandBytes.byte0, commandBytes.byte1, commandBytes.byte2, commandBytes.byte3);
+         setBytesInUlpProgram(0, &commandBytes);
+      }
+   }
+}
 
-   if (!isValidCommand) {
-      printf("ERROR: unsupported command \"%s\"\n", line);
+static void setBytesInUlpProgram(size_t commandIndex, CommandBytes *commandBytes) {
+   ulpProgram[commandIndex * ULP_PROGRAM_COMMAND_SIZE_IN_BYTES + 0] = commandBytes->byte0;
+   ulpProgram[commandIndex * ULP_PROGRAM_COMMAND_SIZE_IN_BYTES + 1] = commandBytes->byte1;
+   ulpProgram[commandIndex * ULP_PROGRAM_COMMAND_SIZE_IN_BYTES + 2] = commandBytes->byte2;
+   ulpProgram[commandIndex * ULP_PROGRAM_COMMAND_SIZE_IN_BYTES + 3] = commandBytes->byte3;
+}
+
+static void printUlpProgram(const uint8_t *programStart) {
+   struct UlpBinary *ulpBinary = (struct UlpBinary*)programStart;
+   ESP_LOGI(TAG, "magic         = %d", ulpBinary->magic);
+   ESP_LOGI(TAG, "textOffset    = %d", ulpBinary->textOffset);
+   ESP_LOGI(TAG, "textSize      = %d", ulpBinary->textSize);
+   ESP_LOGI(TAG, "dataSize      = %d", ulpBinary->dataSize);
+   ESP_LOGI(TAG, "bssSize       = %d", ulpBinary->bssSize);
+   
+   char command[50];
+
+   const uint8_t *codeStart = programStart + ulpBinary->textOffset;
+
+   ESP_LOGI(TAG, "             byte3  byte2  byte1  byte0");
+   for (size_t offset = 0; offset < ulpBinary->textSize; offset = offset + 4) {
+      sprintf(command, "command %2d:     %02x     %02x     %02x     %02x", offset / 4, *(codeStart + offset + 3), *(codeStart + offset + 2), *(codeStart + offset + 1), *(codeStart + offset));
+      ESP_LOGI(TAG, "%s", command);
    }
 }

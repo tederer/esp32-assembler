@@ -6,6 +6,7 @@
 #include <string.h>
 
 #include "Commands.h"
+#include "StringUtils.h"
 
 #define LF           0x0d
 #define CR           0x0a
@@ -151,52 +152,10 @@ Command commands[] = {
 
    {NULL, NULL}
 };
+
 static bool isWhitespace(uint8_t character) {
    return character == SPACE || character == TAB || character == CR;
 } 
-
-static uint8_t* trim(uint8_t* text) {
-   size_t indexOfFirstNonWhitespace = 0;
-   uint8_t currentChar = *(text + indexOfFirstNonWhitespace);
-
-   while (currentChar != 0) {
-      if (isWhitespace(currentChar)) {
-         indexOfFirstNonWhitespace++;
-         currentChar = *(text + indexOfFirstNonWhitespace);
-      } else {
-         break;
-      }
-   }
-
-   if (indexOfFirstNonWhitespace > 0) {
-      size_t offset = 0;
-      while (*(text + indexOfFirstNonWhitespace + offset) != 0) {
-         *(text + offset) = *(text + indexOfFirstNonWhitespace + offset);
-         offset++;
-      }
-      *(text + offset) = 0;
-   }
-
-   size_t indexOfFirstTrailingWhitespace = strlen((char*)text);
-   
-   for (size_t index = strlen((char*)text) - 1; isWhitespace(*(text + index)); index--) {
-      indexOfFirstTrailingWhitespace = index;
-   }
-   
-   if (indexOfFirstTrailingWhitespace < strlen((char*)text)) {
-      *(text + indexOfFirstTrailingWhitespace) = 0;
-   }
-
-   return text;
-}
-
-static uint8_t* toLowerCase(uint8_t* text) {
-   for(uint8_t* currentChar = text; *currentChar != 0; currentChar++) {
-      uint8_t lowerCaseChar = tolower(*currentChar);
-      *currentChar = lowerCaseChar;
-   }
-   return text;
-}
 
 static uint8_t* normalizeTokenSeparators(uint8_t *text) {
    for(size_t index = 0; *(text + index) != 0; index++) {
@@ -245,6 +204,7 @@ bool getCommandBytesFor(const uint8_t *line, CommandBytes* commandBytes) {
          printf("ERROR: failed to compile regex pattern \"%s\"\n", commands[i].pattern);
       } else {
          int result = regexec(&regex, (char*)normalizedLine, 0, NULL, 0);
+         regfree(&regex);
          if (result == 0) {
             commandFound = true;
             Result result = commands[i].getBytes(normalizedLine);
@@ -260,10 +220,6 @@ bool getCommandBytesFor(const uint8_t *line, CommandBytes* commandBytes) {
             break;
          }
       }
-   }
-
-   if (!commandFound) {
-      printf("ERROR: unsupported command\n");
    }
 
    return isValidCommand;

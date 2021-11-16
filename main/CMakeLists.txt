@@ -1,4 +1,4 @@
-set(COMPONENT_SRCS "main.c" "Commands.c")
+set(COMPONENT_SRCS "main.c" "StringUtils.c" "Commands.c")
 set(COMPONENT_ADD_INCLUDEDIRS "")
 set(COMPONENT_REQUIRES soc nvs_flash ulp)
 
