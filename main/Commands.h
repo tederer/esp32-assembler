@@ -11,9 +11,15 @@ typedef struct {
    uint8_t byte3;
 } CommandBytes;
 
+typedef struct {
+   CommandBytes commandBytes;
+   char*        errorMessage;
+} Result;
+
 /**
- * In case of a valid command in line the corresponding bytes get put into bytes and returns true, otherwise false gets returned.
+ * In case of a valid command Command.commandBytes contains the corresponding bytes and Command.errorMessage is NULL, 
+ * otherwise Command.errorMessage points to an error message.
  */
-bool getCommandBytesFor(const uint8_t *line, CommandBytes* bytes);
+Result getCommandBytesFor(const uint8_t *line);
 
 #endif

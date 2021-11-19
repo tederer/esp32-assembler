@@ -14,40 +14,9 @@
 #define SPACE        0x20
 #define COMMA        0x2c
 
-static char DESCRIPTION_ADD[] =       "add";
-static char DESCRIPTION_SUB[] =       "sub";
-static char DESCRIPTION_AND[] =       "and";
-static char DESCRIPTION_OR[] =        "or";
-static char DESCRIPTION_MOVE[] =      "move";
-static char DESCRIPTION_LSH[] =       "lsh";
-static char DESCRIPTION_RSH[] =       "rsh";
-static char DESCRIPTION_STAGE_RST[] = "stage_rst";
-static char DESCRIPTION_STAGE_INC[] = "stage_inc";
-static char DESCRIPTION_STAGE_DEC[] = "stage_dec";
-static char DESCRIPTION_STORE[] =     "st";
-static char DESCRIPTION_LOAD[] =      "ld";
-static char DESCRIPTION_NOP[] =       "nop";
-static char DESCRIPTION_JUMP[] =      "jump";
-static char DESCRIPTION_JUMPR[] =     "jumpr";
-static char DESCRIPTION_JUMPS[] =     "jumps";
-static char DESCRIPTION_HALT[] =      "halt";
-static char DESCRIPTION_WAKE[] =      "wake";
-static char DESCRIPTION_SLEEP[] =     "sleep";
-static char DESCRIPTION_WAIT[] =      "wait";
-static char DESCRIPTION_TSENS[] =     "tsens";
-static char DESCRIPTION_ADC[] =       "adc";
-static char DESCRIPTION_I2C_IO[] =    "i2c_io";
-static char DESCRIPTION_REG_RD[] =    "reg_rd";
-static char DESCRIPTION_REG_WR[] =    "reg_wr";
-
 static char UNSUPPORTED_JUMPR_R0_ERROR_MESSAGE[] = "The conditions \"eq\", \"le\" and \"gt\" are not supported by the ULP. Please use \"lt\" or \"ge\" instead.";
 static char UNSUPPORTED_JUMPR_STAGECOUNT_ERROR_MESSAGE[] = "The conditions \"eq\" and \"gt\" are not supported by the ULP. Please use \"lt\", \"le\" or \"ge\" instead.";
-
-typedef struct {
-   CommandBytes commandBytes;
-   char* commandDescription;
-   char* errorMessage;
-} Result;
+static char UNSUPPORTED_COMMAND[] = "This command is not supported.";
 
 typedef struct {
    char* pattern;
@@ -74,9 +43,9 @@ static int aluOperation(char *instruction);
 static int stageCountAluOperation(char *instruction);
 static int absoluteJumpType(char *condition);
 
-static Result aluOperationWithImmediateValue(uint8_t *commandAsText, char *commandDescription);
-static Result aluOperationAmongRegisters(uint8_t *commandAsText, char *commandDescription);
-static Result stageCountOperation(uint8_t *commandAsText, char *commandDescription);
+static Result aluOperationWithImmediateValue(uint8_t *commandAsText);
+static Result aluOperationAmongRegisters(uint8_t *commandAsText);
+static Result stageCountOperation(uint8_t *commandAsText);
 static Result storeDataInMemory(uint8_t *commandAsText);
 static Result loadDataFromMemory(uint8_t *commandAsText);
 static Result jumpToAbsoluteAddress(uint8_t *commandAsText, bool isImmediate, bool isConditional);
@@ -102,7 +71,7 @@ static Result sleep(uint8_t *commandAsText);
 static Result wait(uint8_t *commandAsText);
 static Result tsens(uint8_t *commandAsText);
 
-static Result waitCycles(int cycles, char *commandDescription);
+static Result waitCycles(int cycles);
 
 Command commands[] = {
    {"add r[0-3] r[0-3] (0x[0-9a-f]+|[0-9]+)",                                                                          addImmediate}, 
@@ -186,16 +155,14 @@ static uint8_t* normalizeTokenSeparators(uint8_t *text) {
    return text;
 }
 
-bool getCommandBytesFor(const uint8_t *line, CommandBytes* commandBytes) {
+Result getCommandBytesFor(const uint8_t *line) {
    uint8_t copyOfLine[strlen((char*)line) + 1];
    strcpy((char*)copyOfLine, (char*)line);
    
    uint8_t* trimmedLine             = trim(copyOfLine);
    uint8_t* trimmedAndLowerCaseLine = toLowerCase(trimmedLine);
    uint8_t* normalizedLine          = normalizeTokenSeparators(trimmedAndLowerCaseLine);
-   bool isValidCommand              = false;
-   bool commandFound                = false;
-
+   
    for (size_t i = 0; commands[i].pattern != NULL; i++) {
       regex_t regex;
       char pattern[strlen(commands[i].pattern) + 2];
@@ -206,75 +173,65 @@ bool getCommandBytesFor(const uint8_t *line, CommandBytes* commandBytes) {
          int result = regexec(&regex, (char*)normalizedLine, 0, NULL, 0);
          regfree(&regex);
          if (result == 0) {
-            commandFound = true;
-            Result result = commands[i].getBytes(normalizedLine);
-            if (result.errorMessage == NULL) {
-               commandBytes->byte0 = result.commandBytes.byte0;
-               commandBytes->byte1 = result.commandBytes.byte1;
-               commandBytes->byte2 = result.commandBytes.byte2;
-               commandBytes->byte3 = result.commandBytes.byte3;
-               isValidCommand = true;
-            } else {
-               printf("ERROR: %s\n", result.errorMessage);
-            }
-            break;
+            return commands[i].getBytes(normalizedLine);
          }
       }
    }
 
-   return isValidCommand;
+   CommandBytes commandBytes = {0x00, 0x00, 0x00, 0x00};
+   return (Result){commandBytes, UNSUPPORTED_COMMAND};
 }
 
 static Result addImmediate(uint8_t *commandAsText) {
-   return aluOperationWithImmediateValue(commandAsText, DESCRIPTION_ADD);
+   return aluOperationWithImmediateValue(commandAsText);
 }
 
 static Result subImmediate(uint8_t *commandAsText) {
-   return aluOperationWithImmediateValue(commandAsText, DESCRIPTION_SUB);
+   return aluOperationWithImmediateValue(commandAsText);
 }
 
 static Result andImmediate(uint8_t *commandAsText) {
-   return aluOperationWithImmediateValue(commandAsText, DESCRIPTION_AND);
+   return aluOperationWithImmediateValue(commandAsText);
 }
 
 static Result orImmediate(uint8_t *commandAsText) {
-   return aluOperationWithImmediateValue(commandAsText, DESCRIPTION_OR);
+   return aluOperationWithImmediateValue(commandAsText);
 }
 
 static Result addRegister(uint8_t *commandAsText) {
-   return aluOperationAmongRegisters(commandAsText, DESCRIPTION_ADD);
+   return aluOperationAmongRegisters(commandAsText);
 }
 
 static Result subRegister(uint8_t *commandAsText) {
-   return aluOperationAmongRegisters(commandAsText, DESCRIPTION_SUB);
+   return aluOperationAmongRegisters(commandAsText);
 }
 
 static Result andRegister(uint8_t *commandAsText) {
-   return aluOperationAmongRegisters(commandAsText, DESCRIPTION_AND);
+   return aluOperationAmongRegisters(commandAsText);
 }
 
 static Result orRegister(uint8_t *commandAsText) {
-   return aluOperationAmongRegisters(commandAsText, DESCRIPTION_OR);
+   return aluOperationAmongRegisters(commandAsText);
 }
 
 static Result nop(uint8_t *commandAsText) {
-   return waitCycles(0, DESCRIPTION_NOP);
+   return waitCycles(0);
 }
 
 static Result leftShiftRegister(uint8_t *commandAsText) {
-   return aluOperationAmongRegisters(commandAsText, DESCRIPTION_LSH);
+   return aluOperationAmongRegisters(commandAsText);
 }
 
 static Result rightShiftRegister(uint8_t *commandAsText) {
-   return aluOperationAmongRegisters(commandAsText, DESCRIPTION_RSH);
+   return aluOperationAmongRegisters(commandAsText);
 }
 
 static Result leftShiftImmediate(uint8_t *commandAsText) {
-   return aluOperationWithImmediateValue(commandAsText, DESCRIPTION_LSH);
+   return aluOperationWithImmediateValue(commandAsText);
 }
 
 static Result rightShiftImmediate(uint8_t *commandAsText) {
-   return aluOperationWithImmediateValue(commandAsText, DESCRIPTION_RSH);
+   return aluOperationWithImmediateValue(commandAsText);
 }
 
 static Result jumpRegister(uint8_t *commandAsText){
@@ -358,7 +315,7 @@ static int relativeStageCountCondition(char *condition) {
 // ------------------------------------------
 // 1098 7654  3210 9876  5432 1098  7654 3210   position
 // oooo 001a  aaa0 iiii  iiii iiii  iiii ssdd   content: o = opCode, a = ALU operation, i = immediate value, s = source register, d = destination register
-static Result aluOperationWithImmediateValue(uint8_t *commandAsText, char* commandDescription) {
+static Result aluOperationWithImmediateValue(uint8_t *commandAsText) {
    int opCode                = 7;
    int bit25to27             = 1;
    char *operation           = strtok((char*)commandAsText, " ");
@@ -376,14 +333,14 @@ static Result aluOperationWithImmediateValue(uint8_t *commandAsText, char* comma
    uint8_t byte3             = (opCode << 4) | (bit25to27 << 1) | ((aluOperatation & 0x8) >> 3);
 
    CommandBytes commandBytes = {byte0, byte1, byte2, byte3};
-   return (Result){commandBytes, commandDescription, NULL};
+   return (Result){commandBytes, NULL};
 }
 
 // byte3      byte2      byte1      byte0
 // ------------------------------------------
 // 1098 7654  3210 9876  5432 1098  7654 3210   position
 // oooo 000a  aaa0 0000  0000 0000  00SS ssdd   content: o = opCode, a = ALU operation, i = immediate value, S = source register2, s = source register1, d = destination register
-static Result aluOperationAmongRegisters(uint8_t *commandAsText, char *commandDescription) {
+static Result aluOperationAmongRegisters(uint8_t *commandAsText) {
    int opCode                = 7;
    int bit25to27             = 0;
    char *operation           = strtok((char*)commandAsText, " ");
@@ -403,14 +360,14 @@ static Result aluOperationAmongRegisters(uint8_t *commandAsText, char *commandDe
    uint8_t byte3             = (opCode << 4) | (bit25to27 << 1) | ((aluOperatation & 0x8) >> 3);
 
    CommandBytes commandBytes = {byte0, byte1, byte2, byte3};
-   return (Result){commandBytes, commandDescription, NULL};
+   return (Result){commandBytes, NULL};
 }
 
 // byte3      byte2      byte1      byte0
 // ------------------------------------------
 // 1098 7654  3210 9876  5432 1098  7654 3210   position
 // oooo 010a  aaa0 0000  0000 iiii  iiii 0000   content: o = opCode, a = ALU operation, i = immediate value
-static Result stageCountOperation(uint8_t *commandAsText, char *commandDescription) {
+static Result stageCountOperation(uint8_t *commandAsText) {
    int opCode                = 7;
    int bit25to27             = 2;
    char *operation           = strtok((char*)commandAsText, " ");
@@ -426,7 +383,7 @@ static Result stageCountOperation(uint8_t *commandAsText, char *commandDescripti
    uint8_t byte3             = (opCode << 4) | (bit25to27 << 1) | ((aluOperatation & 0x8) >> 3);
 
    CommandBytes commandBytes = {byte0, byte1, byte2, byte3};
-   return (Result){commandBytes, commandDescription, NULL};
+   return (Result){commandBytes, NULL};
 }
 
 // byte3      byte2      byte1      byte0
@@ -448,7 +405,7 @@ static Result storeDataInMemory(uint8_t *commandAsText) {
    uint8_t byte3             = (opCode << 4) | (bit25to27 << 1);
 
    CommandBytes commandBytes = {byte0, byte1, byte2, byte3};
-   return (Result){commandBytes, DESCRIPTION_STORE, NULL};
+   return (Result){commandBytes, NULL};
 }
 
 // byte3      byte2      byte1      byte0
@@ -470,7 +427,7 @@ static Result loadDataFromMemory(uint8_t *commandAsText) {
    uint8_t byte3             = (opCode << 4) | (bit25to27 << 1);
 
    CommandBytes commandBytes = {byte0, byte1, byte2, byte3};
-   return (Result){commandBytes, DESCRIPTION_LOAD, NULL};
+   return (Result){commandBytes, NULL};
 }
 
 // byte3      byte2      byte1      byte0
@@ -501,7 +458,7 @@ static Result jumpToAbsoluteAddress(uint8_t *commandAsText, bool isImmediate, bo
    uint8_t byte3                    = (opCode << 4) | (bit25to27 << 1) | ((jumpType & 0x4) >> 2);
 
    CommandBytes commandBytes = {byte0, byte1, byte2, byte3};
-   return (Result){commandBytes, DESCRIPTION_JUMP, NULL};
+   return (Result){commandBytes, NULL};
 }
 
 // byte3      byte2      byte1      byte0
@@ -526,7 +483,7 @@ static Result jumpConditionalUponR0ToRelativeAddress(uint8_t *commandAsText) {
    uint8_t byte3                    = (opCode << 4) | (bit25to27 << 1) | (incrementProgramCounter ? 0 : 1);
 
    CommandBytes commandBytes = {byte0, byte1, byte2, byte3};
-   return (Result){commandBytes, DESCRIPTION_JUMPR, NULL};
+   return (Result){commandBytes, NULL};
 }
 
 // byte3      byte2      byte1      byte0
@@ -550,7 +507,7 @@ static Result jumpConditionalUponStageCountToRelativeAddress(uint8_t *commandAsT
    uint8_t byte3                    = (opCode << 4) | (bit25to27 << 1) | (incrementProgramCounter ? 0 : 1);
 
    CommandBytes commandBytes = {byte0, byte1, byte2, byte3};
-   return (Result){commandBytes, DESCRIPTION_JUMPS, NULL};
+   return (Result){commandBytes, NULL};
 }
 
 // byte3      byte2      byte1      byte0
@@ -570,7 +527,7 @@ static Result adc(uint8_t *commandAsText) {
    uint8_t byte3                    = opCode << 4;
 
    CommandBytes commandBytes = {byte0, byte1, byte2, byte3};
-   return (Result){commandBytes, DESCRIPTION_ADC, NULL};
+   return (Result){commandBytes, NULL};
 }
 
 // byte3      byte2      byte1      byte0
@@ -596,7 +553,7 @@ static Result i2cReadWrite(uint8_t *commandAsText) {
    uint8_t byte3                    = (opCode << 4) | (readWrite << 3) | ((slaveRegister & 0xc) >> 2);
 
    CommandBytes commandBytes = {byte0, byte1, byte2, byte3};
-   return (Result){commandBytes, DESCRIPTION_I2C_IO, NULL};
+   return (Result){commandBytes, NULL};
 }
 
 // byte3      byte2      byte1      byte0
@@ -616,7 +573,7 @@ static Result readRegister(uint8_t *commandAsText) {
    uint8_t byte3                    = (opCode << 4) | ((endBitNumber & 0x1e) >> 1);
 
    CommandBytes commandBytes = {byte0, byte1, byte2, byte3};
-   return (Result){commandBytes, DESCRIPTION_REG_RD, NULL};
+   return (Result){commandBytes, NULL};
 }
 
 // byte3      byte2      byte1      byte0
@@ -637,63 +594,63 @@ static Result writeRegister(uint8_t *commandAsText) {
    uint8_t byte3                    = (opCode << 4) | ((endBitNumber & 0x1e) >> 1);
 
    CommandBytes commandBytes = {byte0, byte1, byte2, byte3};
-   return (Result){commandBytes, DESCRIPTION_REG_WR, NULL};
+   return (Result){commandBytes, NULL};
 }
 
 // The conditions eq, le and gt of jumpr are not supported by the ULP. The compiler replaces them by modified jumpr commands using lt and ge.
 // For details visit https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-guides/ulp_instruction_set.html#jumpr-jump-to-a-relative-offset-condition-based-on-r0.
 static Result unsupportedJumpRelativeConditionalBasedOnR0(uint8_t *commandAsText){
    CommandBytes commandBytes = {0, 0, 0, 0};
-   return (Result){commandBytes, NULL, UNSUPPORTED_JUMPR_R0_ERROR_MESSAGE};
+   return (Result){commandBytes, UNSUPPORTED_JUMPR_R0_ERROR_MESSAGE};
 }
 
 // The conditions eq and gt of jumps are not supported by the ULP. The compiler replaces them by modified jumpr commands using lt, le and ge.
 // For details visit https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-guides/ulp_instruction_set.html#jumps-jump-to-a-relative-address-condition-based-on-stage-count.
 static Result unsupportedJumpRelativeConditionalBasedOnStageCount(uint8_t *commandAsText){
    CommandBytes commandBytes = {0, 0, 0, 0};
-   return (Result){commandBytes, NULL, UNSUPPORTED_JUMPR_STAGECOUNT_ERROR_MESSAGE};
+   return (Result){commandBytes, UNSUPPORTED_JUMPR_STAGECOUNT_ERROR_MESSAGE};
 }
 
 static Result stageReset(uint8_t *commandAsText){
-   return stageCountOperation(commandAsText, DESCRIPTION_STAGE_RST);
+   return stageCountOperation(commandAsText);
 }
 
 static Result stageIncrement(uint8_t *commandAsText){
-   return stageCountOperation(commandAsText, DESCRIPTION_STAGE_INC);
+   return stageCountOperation(commandAsText);
 }
 
 static Result stageDecrement(uint8_t *commandAsText){
-   return stageCountOperation(commandAsText, DESCRIPTION_STAGE_DEC);
+   return stageCountOperation(commandAsText);
 }
 
 static Result halt(uint8_t *commandAsText){
    CommandBytes commandBytes = {0x00, 0x00, 0x00, 0xb0};
-   return (Result){commandBytes, DESCRIPTION_HALT, NULL};
+   return (Result){commandBytes, NULL};
 }
 
 static Result wake(uint8_t *commandAsText){
    CommandBytes commandBytes = {0x01, 0x00, 0x00, 0x90};
-   return (Result){commandBytes, DESCRIPTION_WAKE, NULL};
+   return (Result){commandBytes, NULL};
 }
 
 static Result sleep(uint8_t *commandAsText){
    strtok((char*)commandAsText, " ");
    int reg                   = strtol(strtok( NULL, " "), NULL, 0);
    CommandBytes commandBytes = {reg, 0x00, 0x00, 0x92};
-   return (Result){commandBytes, DESCRIPTION_SLEEP, NULL};
+   return (Result){commandBytes, NULL};
 }
 
 static Result wait(uint8_t *commandAsText){
    strtok((char*)commandAsText, " ");
    int cycles = strtol(strtok( NULL, " "), NULL, 0);
-   return waitCycles(cycles, DESCRIPTION_WAIT);
+   return waitCycles(cycles);
 }
 
-static Result waitCycles(int cycles, char *commandDescription){
+static Result waitCycles(int cycles){
    uint8_t byte0             = cycles & 0xff;
    uint8_t byte1             = (cycles & 0xff00) >> 8;
    CommandBytes commandBytes = {byte0, byte1, 0x00, 0x40};
-   return (Result){commandBytes, commandDescription, NULL};
+   return (Result){commandBytes, NULL};
 }
 
 static Result tsens(uint8_t *commandAsText){
@@ -703,13 +660,13 @@ static Result tsens(uint8_t *commandAsText){
    uint8_t byte0             = reg | ((waitCycles & 0x3f) << 2);
    uint8_t byte1             = (waitCycles & 0x3fc0) >> 6;
    CommandBytes commandBytes = {byte0, byte1, 0x00, 0xa0};
-   return (Result){commandBytes, DESCRIPTION_TSENS, NULL};
+   return (Result){commandBytes, NULL};
 }
 
 static Result moveImmediateToRegister(uint8_t *commandAsText) {
-   return aluOperationWithImmediateValue(commandAsText, DESCRIPTION_MOVE);
+   return aluOperationWithImmediateValue(commandAsText);
 }
 
 static Result moveRegisterToRegister(uint8_t *commandAsText) {
-   return aluOperationAmongRegisters(commandAsText, DESCRIPTION_MOVE);
+   return aluOperationAmongRegisters(commandAsText);
 }

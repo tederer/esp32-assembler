@@ -107,33 +107,35 @@ static void initializeUlpProgram() {
    }
 
    // set all commands to nop
-   CommandBytes noopCommand;
-   getCommandBytesFor((uint8_t*)"nop", &noopCommand);
+   Result noopCommand = getCommandBytesFor((uint8_t*)"nop");
    offset += ULP_PROGRAM_SHARED_VARIABLES_COUNT;
 
    for(size_t commandIndex = 0; commandIndex < ULP_PROGRAM_MAX_COMMAND_COUNT; commandIndex++) {
-      setBytesInUlpProgram(offset + commandIndex, &noopCommand);
+      setBytesInUlpProgram(offset + commandIndex, &(noopCommand.commandBytes));
    }
 
    // append wake code sequence
    offset += ULP_PROGRAM_MAX_COMMAND_COUNT;
-   CommandBytes wakeCommands[ULP_PROGRAM_WAKE_COMMANDS_COUNT];
-   getCommandBytesFor((uint8_t*)WAKE_COMMANDS[0], &wakeCommands[0]);
-   getCommandBytesFor((uint8_t*)WAKE_COMMANDS[1], &wakeCommands[1]);
-   getCommandBytesFor((uint8_t*)WAKE_COMMANDS[2], &wakeCommands[2]);
-   getCommandBytesFor((uint8_t*)WAKE_COMMANDS[3], &wakeCommands[3]);
+   Result wakeCommands[ULP_PROGRAM_WAKE_COMMANDS_COUNT];
+   wakeCommands[0] = getCommandBytesFor((uint8_t*)WAKE_COMMANDS[0]);
+   wakeCommands[1] = getCommandBytesFor((uint8_t*)WAKE_COMMANDS[1]);
+   wakeCommands[2] = getCommandBytesFor((uint8_t*)WAKE_COMMANDS[2]);
+   wakeCommands[3] = getCommandBytesFor((uint8_t*)WAKE_COMMANDS[3]);
 
    for(size_t commandIndex = 0; commandIndex < ULP_PROGRAM_WAKE_COMMANDS_COUNT; commandIndex++) {
-      setBytesInUlpProgram(offset + commandIndex, &wakeCommands[commandIndex]);
+      setBytesInUlpProgram(offset + commandIndex, &(wakeCommands[commandIndex].commandBytes));
    }
 }
 
 static void loadCorrectedUlpProgram()
 {
    ESP_LOGI(TAG, "fixing jumpr bug in ULP program");
-   CommandBytes commandBytes;
-   getCommandBytesFor((uint8_t*)"jumpr -8, 1, lt", &commandBytes);
-   uint8_t correctedJumpr[4] = {commandBytes.byte0, commandBytes.byte1, commandBytes.byte2, commandBytes.byte3};
+   Result jumprCommand = getCommandBytesFor((uint8_t*)"jumpr -8, 1, lt");
+   uint8_t correctedJumpr[4] = {
+      jumprCommand.commandBytes.byte0, 
+      jumprCommand.commandBytes.byte1, 
+      jumprCommand.commandBytes.byte2, 
+      jumprCommand.commandBytes.byte3};
    size_t programSize = ulp_main_bin_end - ulp_main_bin_start;
    size_t jumprStartPosition = (programSize - 1) - (2 * 4) + 1;
    uint8_t fixedProgram[programSize];
@@ -219,14 +221,18 @@ static void processNextLine(uint8_t *line) {
       // TODO start ULP program
    } else {
       // TODO handle command count
-      CommandBytes commandBytes;
-      bool isValidCommand = getCommandBytesFor(line, &commandBytes);
+      Result result = getCommandBytesFor(trimmedLineInLowerCase);
 
-      if (!isValidCommand) {
-         printf("ERROR: unsupported command \"%s\"\n", line);
+      if (result.errorMessage != NULL) {
+         printf("ERROR: %s (input=\"%s\")\n", result.errorMessage, trimmedLineInLowerCase);
       } else {
-         printf("command bytes: 0x%02x, 0x%02x, 0x%02x, 0x%02x\n", commandBytes.byte0, commandBytes.byte1, commandBytes.byte2, commandBytes.byte3);
-         setBytesInUlpProgram(0, &commandBytes);
+         printf("command bytes for \"%s\": 0x%02x, 0x%02x, 0x%02x, 0x%02x\n", 
+            trimmedLineInLowerCase, 
+            result.commandBytes.byte0, 
+            result.commandBytes.byte1, 
+            result.commandBytes.byte2, 
+            result.commandBytes.byte3);
+         setBytesInUlpProgram(0, &(result.commandBytes));
       }
    }
 }
