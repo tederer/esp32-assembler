@@ -30,6 +30,7 @@ static const char* TAG = "main";
 
 static uint8_t ulpProgram[ULP_PROGRAM_HEADER_SIZE_IN_BYTES + (ULP_PROGRAM_MAX_COMMAND_COUNT + ULP_PROGRAM_WAKE_COMMANDS_COUNT) * ULP_PROGRAM_COMMAND_SIZE_IN_BYTES];
 static char *WAKE_COMMANDS[ULP_PROGRAM_WAKE_COMMANDS_COUNT] = { "reg_rd 0x30, 0x13, 0x13", "and r0, r0, 1", "jumpr -8, 1, lt", "wake"};
+static size_t nextCommandIndex = 0;
 
 extern const uint8_t ulp_main_bin_start[] asm("_binary_ulp_main_bin_start");
 extern const uint8_t ulp_main_bin_end[]   asm("_binary_ulp_main_bin_end");
@@ -60,25 +61,15 @@ struct Command {
 };
 
 void app_main()
-{   
+{
    esp_sleep_wakeup_cause_t cause = esp_sleep_get_wakeup_cause();
    if (cause == ESP_SLEEP_WAKEUP_ULP) {
       ESP_LOGI(TAG, "return value = 0x%04X", ulp_returnValue & 0xffff);
    } else {
       ESP_LOGI(TAG, "first startup -> initializing ULP");
       initUlp();
-      printUlpProgram(ulp_main_bin_start);
+      //printUlpProgram(ulp_main_bin_start);
       initializeUlpProgram();
-      printUlpProgram(ulpProgram);
-      /*loadUlpProgram(ulpProgram);
-      startUlpProgram();
-   
-      ESP_LOGI(TAG, "disabling all wakeup sources");
-      ESP_ERROR_CHECK( esp_sleep_disable_wakeup_source(ESP_SLEEP_WAKEUP_ALL) );
-      ESP_LOGI(TAG, "enabling ULP wakeup");
-      ESP_ERROR_CHECK( esp_sleep_enable_ulp_wakeup() );
-      ESP_LOGI(TAG, "Entering deep sleep");
-      esp_deep_sleep_start();*/
    } 
    
    xTaskCreate(handleCommands, "handle commands from serial interface", 4000, NULL, 10, NULL);
@@ -100,15 +91,14 @@ static void initializeUlpProgram() {
 
    // set all shared variables to 0
    CommandBytes zeroValue = {0x00, 0x00, 0x00, 0x00};
-   size_t offset = ULP_PROGRAM_HEADER_SIZE_IN_BYTES / ULP_PROGRAM_COMMAND_SIZE_IN_BYTES;
-
+   
    for(size_t sharedVariableIndex = 0; sharedVariableIndex < ULP_PROGRAM_SHARED_VARIABLES_COUNT; sharedVariableIndex++) {
-      setBytesInUlpProgram(offset + sharedVariableIndex, &zeroValue);
+      setBytesInUlpProgram(sharedVariableIndex, &zeroValue);
    }
 
    // set all commands to nop
    Result noopCommand = getCommandBytesFor((uint8_t*)"nop");
-   offset += ULP_PROGRAM_SHARED_VARIABLES_COUNT;
+   size_t offset = ULP_PROGRAM_SHARED_VARIABLES_COUNT;
 
    for(size_t commandIndex = 0; commandIndex < ULP_PROGRAM_MAX_COMMAND_COUNT; commandIndex++) {
       setBytesInUlpProgram(offset + commandIndex, &(noopCommand.commandBytes));
@@ -183,14 +173,14 @@ static void initSerialInterface() {
 }
 
 static void handleCommands(void * pvParameters) {
-   initSerialInterface();
-   
    size_t readBytes;
    uint8_t buffer[2];
    size_t maxLineLength = 40;
    uint8_t line[maxLineLength + 1];
    size_t insertationPosition = 0;
-
+   
+   initSerialInterface();
+   
    while (1) {
       readBytes = uart_read_bytes(SERIAL_PORT, buffer, 1, 100 / portTICK_PERIOD_MS);
       if (readBytes > 0) {
@@ -218,7 +208,16 @@ static void processNextLine(uint8_t *line) {
    toLowerCase(trim(trimmedLineInLowerCase));
    if (strcmp((const char*)trimmedLineInLowerCase, "run") == 0) {
       printf("run ULP program requested\n");
-      // TODO start ULP program
+      printUlpProgram(ulpProgram);
+      /*loadUlpProgram(ulpProgram);
+      startUlpProgram();
+   
+      ESP_LOGI(TAG, "disabling all wakeup sources");
+      ESP_ERROR_CHECK( esp_sleep_disable_wakeup_source(ESP_SLEEP_WAKEUP_ALL) );
+      ESP_LOGI(TAG, "enabling ULP wakeup");
+      ESP_ERROR_CHECK( esp_sleep_enable_ulp_wakeup() );
+      ESP_LOGI(TAG, "Entering deep sleep");
+      esp_deep_sleep_start();*/
    } else {
       // TODO handle command count
       Result result = getCommandBytesFor(trimmedLineInLowerCase);
@@ -226,22 +225,26 @@ static void processNextLine(uint8_t *line) {
       if (result.errorMessage != NULL) {
          printf("ERROR: %s (input=\"%s\")\n", result.errorMessage, trimmedLineInLowerCase);
       } else {
-         printf("command bytes for \"%s\": 0x%02x, 0x%02x, 0x%02x, 0x%02x\n", 
+         size_t commandIndex = nextCommandIndex++;
+         setBytesInUlpProgram(ULP_PROGRAM_SHARED_VARIABLES_COUNT + commandIndex, &(result.commandBytes));
+         printf("added command \"%s\" (0x%02x, 0x%02x, 0x%02x, 0x%02x) at position %u\n", 
             trimmedLineInLowerCase, 
             result.commandBytes.byte0, 
             result.commandBytes.byte1, 
             result.commandBytes.byte2, 
-            result.commandBytes.byte3);
-         setBytesInUlpProgram(0, &(result.commandBytes));
+            result.commandBytes.byte3,
+            commandIndex);
       }
    }
 }
 
 static void setBytesInUlpProgram(size_t commandIndex, CommandBytes *commandBytes) {
-   ulpProgram[commandIndex * ULP_PROGRAM_COMMAND_SIZE_IN_BYTES + 0] = commandBytes->byte0;
-   ulpProgram[commandIndex * ULP_PROGRAM_COMMAND_SIZE_IN_BYTES + 1] = commandBytes->byte1;
-   ulpProgram[commandIndex * ULP_PROGRAM_COMMAND_SIZE_IN_BYTES + 2] = commandBytes->byte2;
-   ulpProgram[commandIndex * ULP_PROGRAM_COMMAND_SIZE_IN_BYTES + 3] = commandBytes->byte3;
+   size_t indexOfFirstByte = ULP_PROGRAM_HEADER_SIZE_IN_BYTES + (commandIndex * ULP_PROGRAM_COMMAND_SIZE_IN_BYTES);
+
+   ulpProgram[indexOfFirstByte + 0] = commandBytes->byte0;
+   ulpProgram[indexOfFirstByte + 1] = commandBytes->byte1;
+   ulpProgram[indexOfFirstByte + 2] = commandBytes->byte2;
+   ulpProgram[indexOfFirstByte + 3] = commandBytes->byte3;
 }
 
 static void printUlpProgram(const uint8_t *programStart) {
