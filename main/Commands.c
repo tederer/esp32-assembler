@@ -74,9 +74,9 @@ static Result tsens(uint8_t *commandAsText);
 static Result waitCycles(int cycles);
 
 Command commands[] = {
-   {"add r[0-3] r[0-3] (0x[0-9a-f]+|[0-9]+)",                                                                          addImmediate}, 
+   {"add r[0-3] r[0-3] ([-]?(0x[0-9a-f]+|[0-9]+))",                                                                    addImmediate}, 
    {"add r[0-3] r[0-3] r[0-3]",                                                                                        addRegister}, 
-   {"sub r[0-3] r[0-3] (0x[0-9a-f]+|[0-9]+)",                                                                          subImmediate}, 
+   {"sub r[0-3] r[0-3] ([-]?(0x[0-9a-f]+|[0-9]+))",                                                                    subImmediate}, 
    {"sub r[0-3] r[0-3] r[0-3]",                                                                                        subRegister}, 
    {"and r[0-3] r[0-3] (0x[0-9a-f]+|[0-9]+)",                                                                          andImmediate}, 
    {"and r[0-3] r[0-3] r[0-3]",                                                                                        andRegister}, 
@@ -84,9 +84,9 @@ Command commands[] = {
    {"or r[0-3] r[0-3] r[0-3]",                                                                                         orRegister}, 
    {"move r[0-3] r[0-3]",                                                                                              moveRegisterToRegister}, 
    {"move r[0-3] (0x[0-9a-f]+|[0-9]+)",                                                                                moveImmediateToRegister}, 
-   {"lsh r[0-3] r[0-3] (0x[0-9a-f]+|[0-9]+)",                                                                          leftShiftImmediate}, 
+   {"lsh r[0-3] r[0-3] ([-]?(0x[0-9a-f]+|[0-9]+))",                                                                    leftShiftImmediate}, 
    {"lsh r[0-3] r[0-3] r[0-3]",                                                                                        leftShiftRegister}, 
-   {"rsh r[0-3] r[0-3] (0x[0-9a-f]+|[0-9]+)",                                                                          rightShiftImmediate}, 
+   {"rsh r[0-3] r[0-3] ([-]?(0x[0-9a-f]+|[0-9]+))",                                                                    rightShiftImmediate}, 
    {"rsh r[0-3] r[0-3] r[0-3]",                                                                                        rightShiftRegister}, 
                                                   
    {"stage_rst",                                                                                                       stageReset},
@@ -314,7 +314,7 @@ static int relativeStageCountCondition(char *condition) {
 // byte3      byte2      byte1      byte0
 // ------------------------------------------
 // 1098 7654  3210 9876  5432 1098  7654 3210   position
-// oooo 001a  aaa0 iiii  iiii iiii  iiii ssdd   content: o = opCode, a = ALU operation, i = immediate value, s = source register, d = destination register
+// oooo 001a  aaa0 iiii  iiii iiii  iiii ssdd   content: o = opCode, a = ALU operation, i = signed immediate value, s = source register, d = destination register
 static Result aluOperationWithImmediateValue(uint8_t *commandAsText) {
    int opCode                = 7;
    int bit25to27             = 1;
@@ -324,12 +324,13 @@ static Result aluOperationWithImmediateValue(uint8_t *commandAsText) {
    if (strcmp(operation, "move") != 0) {
       sourceRegister = atoi(strtok( NULL, " ") + 1);
    }
-   int immediate             = strtol(strtok( NULL, " "), NULL, 0);
+   char *immediateText = strtok( NULL, " ");
+   int16_t immediate         = (int16_t)strtol(immediateText, NULL, 0);
    int aluOperatation        = aluOperation(operation);
    
    uint8_t byte0             = (destinationRegister & 0x03) | ((sourceRegister & 0x03) << 2) | ((immediate & 0xf) << 4);
-   uint8_t byte1             = (immediate >> 4) & 0xff;
-   uint8_t byte2             = ((aluOperatation & 0x7) << 5) | ((immediate >> 12) & 0xff);
+   uint8_t byte1             = (immediate & 0xff0) >> 4;
+   uint8_t byte2             = ((aluOperatation & 0x7) << 5) | ((immediate & 0xf000) >> 12);
    uint8_t byte3             = (opCode << 4) | (bit25to27 << 1) | ((aluOperatation & 0x8) >> 3);
 
    CommandBytes commandBytes = {byte0, byte1, byte2, byte3};
