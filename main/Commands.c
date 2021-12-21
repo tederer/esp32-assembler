@@ -83,7 +83,7 @@ Command commands[] = {
    {"or r[0-3] r[0-3] (0x[0-9a-f]+|[0-9]+)",                                                                           orImmediate}, 
    {"or r[0-3] r[0-3] r[0-3]",                                                                                         orRegister}, 
    {"move r[0-3] r[0-3]",                                                                                              moveRegisterToRegister}, 
-   {"move r[0-3] (0x[0-9a-f]+|[0-9]+)",                                                                                moveImmediateToRegister}, 
+   {"move r[0-3] ([-]?(0x[0-9a-f]+|[0-9]+))",                                                                          moveImmediateToRegister}, 
    {"lsh r[0-3] r[0-3] ([-]?(0x[0-9a-f]+|[0-9]+))",                                                                    leftShiftImmediate}, 
    {"lsh r[0-3] r[0-3] r[0-3]",                                                                                        leftShiftRegister}, 
    {"rsh r[0-3] r[0-3] ([-]?(0x[0-9a-f]+|[0-9]+))",                                                                    rightShiftImmediate}, 

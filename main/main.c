@@ -26,7 +26,10 @@
 #define ULP_PROGRAM_COMMAND_SIZE_IN_BYTES       4
 #define ULP_PROGRAM_HALT_COMMANDS_COUNT         2
 
+// extern const uint8_t ulp_main_bin_start[] asm("_binary_ulp_main_bin_start");
+
 static uint8_t ulpProgram[ULP_PROGRAM_HEADER_SIZE_IN_BYTES + (ULP_PROGRAM_MAX_COMMAND_COUNT + ULP_PROGRAM_HALT_COMMANDS_COUNT) * ULP_PROGRAM_COMMAND_SIZE_IN_BYTES];
+
 // The reg_wr command disables the ULP timer to ensure that the ULP program gets executed only once (see technical reference manual "29.5 ULP Program Execution").
 static char *HALT_COMMANDS[ULP_PROGRAM_HALT_COMMANDS_COUNT] = { "reg_wr 6, 24, 24, 0", "halt"};
 static size_t nextCommandIndex = 0;

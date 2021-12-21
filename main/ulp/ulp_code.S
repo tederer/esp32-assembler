@@ -6,3 +6,6 @@
 entry:
 
 nop
+move r0, -1
+move r1, -32768
+nop
