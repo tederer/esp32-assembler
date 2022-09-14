@@ -38,7 +38,7 @@ The PDF (shipped together with the tools) of the Flash Download Tools provides m
 
 ## Supported commands
 
-In addition to the [ESP32 ULP coprocessor instruction set](https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-guides/ulp_instruction_set.html), the following commands are available.
+In addition to the [ESP32 ULP coprocessor instruction set](https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-reference/system/ulp_instruction_set.html), the following commands are available.
 
 | command                     | description                                                             |
 |-----------------------------|-------------------------------------------------------------------------|
@@ -82,6 +82,6 @@ Call `idf.py flash` to build and transfer the software to your ESP32.
 
 ## References
 
-[ESP32 ULP coprocessor instruction set](https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-guides/ulp_instruction_set.html)
+[ESP32 ULP coprocessor instruction set](https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-reference/system/ulp_instruction_set.html)
 
 [ESP32 Technical Reference Manual](https://www.espressif.com/sites/default/files/documentation/esp32_technical_reference_manual_en.pdf)
